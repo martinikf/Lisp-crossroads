@@ -19,7 +19,7 @@ semaphore-type:   Typ semaforu, lze přepínat za běhu. Jsou definovány 2 stav
 semaphore-phase:  Reprezentuje aktuální fázi semaforu.
 phase-count:      Počet fází semaforu. Pouze ke čtení.
 radius:           Poloměr světla v semaforu, ovlivňuje celkovou velikost semaforu.
-lights-count      Vrátí počet světel v semaforu. Pouze ke čtení.
+
 
 NOVÉ ZPRÁVY
 
@@ -27,15 +27,14 @@ next-phase        Přepne semafor do další fáze. Pokud je zpráva poslána s 
 
 |#
 
-;(defvar *semaphores*)
-;(setf *semaphores*
-;      '(:vehicle 3 (:phases (1 0 0) (1 1 0) (0 0 1) (0 1 0)) 
-;      (:pedestrian 2 (:phases ) ))
+(defvar *semaphores*)
+(setf *semaphores*
+      '((:vehicle (:red :orange :green) ((1 0 0) (1 1 0) (0 0 1) (0 1 0)))
+      (:pedestrian (:red :green) ((1 0) (0 1)))))
 
 (defclass semaphore (abstract-picture)
   ((semaphore-type :initform :vehicle)
    (semaphore-phase :initform 0)
-   (phase-count :initform 4)
    (radius :initform 10)))
 
 (defmethod initialize-instance ((s semaphore) &key)
@@ -45,6 +44,25 @@ next-phase        Přepne semafor do další fáze. Pokud je zpráva poslána s 
 ;;;
 ;;; Vlastnosti
 ;;;
+
+(defmethod definition ((s semaphore))
+  (let ((def '()))
+    (dolist (item *semaphores*)
+      (when (eql (car item) (semaphore-type s))
+        (setf def item)))
+    def))
+
+(defmethod lights ((s semaphore))
+  (length (colors s)))
+
+(defmethod colors ((s semaphore))
+  (cadr (definition s)))
+
+(defmethod phases ((s semaphore))
+  (caddr (definition s)))
+
+(defmethod phase-count ((s semaphore))
+  (length (phases s)))
 
 (defmethod radius ((s semaphore))
   (slot-value s 'radius))
@@ -58,17 +76,10 @@ next-phase        Přepne semafor do další fáze. Pokud je zpráva poslána s 
 (defmethod semaphore-type ((s semaphore))
   (slot-value s 'semaphore-type))
 
-(defmethod do-set-semaphore-type ((s semaphore) type phase-count)
-  (setf (slot-value s 'semaphore-type) type)
-  (setf (slot-value s 'phase-count) phase-count)
-  (make-items s T)
-  s)
-
+;restartuje pozici semaforu do levého horního rohu
 (defmethod set-semaphore-type ((s semaphore) value)
-  (case value
-    (:pedestrian (do-set-semaphore-type s :pedestrian 2))
-    (:vehicle (do-set-semaphore-type s :vehicle 4))
-    (otherwise (error "Unknown semaphore-type")))
+  (setf (slot-value s 'semaphore-type) value)
+  (make-items s)
   s)
 
 (defmethod semaphore-phase ((s semaphore))
@@ -78,16 +89,9 @@ next-phase        Přepne semafor do další fáze. Pokud je zpráva poslána s 
   (unless (< value (phase-count s))
     (error "Semaphore phase is out of bounds"))
   (setf (slot-value s 'semaphore-phase) value)
-  (refresh-lights s)
+  (set-phase s)
   s)
 
-(defmethod phase-count ((s semaphore))
-  (slot-value s 'phase-count))
-
-(defmethod lights-count ((s semaphore))
-  (case (semaphore-type s)
-    (:pedestrian 2)
-    (:vehicle 3)))
 
 ;;;
 ;;; Zprávy
@@ -97,99 +101,36 @@ next-phase        Přepne semafor do další fáze. Pokud je zpráva poslána s 
   (if (= (- (phase-count s) (semaphore-phase s)) 1)
       (set-semaphore-phase s 0)
     (set-semaphore-phase s (1+ (semaphore-phase s))))
-  (refresh-lights s)
   (when window (redraw window))
   s)
 
-(defmethod refresh-lights ((s semaphore))
-  (cond 
-   ((eql (semaphore-type s) :vehicle)
-    (case (semaphore-phase s)
-      (0 (set-lights s T nil nil))
-      (1 (set-lights s T T nil))
-      (2 (set-lights s NIL NIL T))
-      (3 (set-lights s NIL T NIL))))
-   ((eql (semaphore-type s) :pedestrian)
-    (case (semaphore-phase s)
-      (0 (set-lights s T NIL))
-      (1 (set-lights S NIL T))))
-   (t (error "Semaphore phases are not defined, refresh-lights")))
-  s)
-
-(defmethod set-lights ((s semaphore) L1 L2 &optional L3)
-  (let ((items (items s)))
-    (if L1
-        (turn-on (car items))
-      (turn-off (car items)))
-    (if L2
-        (turn-on (cadr items))
-      (turn-off (cadr items)))
-    (when (eql (semaphore-type s) :vehicle)
-      (if L3
-          (turn-on (caddr items))
-        (turn-off (caddr items))))
+(defmethod set-phase ((s semaphore))
+  (let ((items (items s))
+        (phase (nth (semaphore-phase s) (phases s))))
+    (dotimes (i (lights s))
+      (if (= (nth i phase) 1)
+          (turn-on (nth i items))
+        (turn-off (nth i items))))
     s))
 
-;;;
-;;; Vytvoření items
-;;;
-;Funguje jen pro 4 rotace,
+(defmethod make-items ((s semaphore))
+  (let ((lights '()))
+    (dotimes (i (lights s))
+      (setf lights (cons (turn-off (set-radius (set-on-color (move (make-instance 'light) (radius s) (* (+ (* 2 i) 1) (radius s))) (nth i (colors s))) (- (radius s) 1))) lights)))
+    (setf lights (reverse lights))
+    (setf (cdr (last lights))
+                     (list (set-filledp  (set-items 
+                         (make-instance 'polygon)
+                         (list 
+                          (move (make-instance 'point) 0 0)
+                          (move (make-instance 'point) (* 2 (radius s)) 0)
+                          (move (make-instance 'point) (* 2 (radius s)) (* 2 (radius s) (lights s)))
+                          (move (make-instance 'point) 0 (* 2 (radius s) (lights s))))
+                        )T )))
+    (do-set-items s lights)
+    (set-phase s)
+    s))
 
-(defmethod make-items ((s semaphore) &optional type-change)
-  (let ((old (when type-change (items s)))
-        (item-list (make-item-list s)))
-    (item-list-lights s item-list)
-    (if type-change
-        (let* ((x1 (x (car (items (car (last old))))))
-               (y1 (y (car (items (car (last old))))))
-               (x2 (x (cadr (items (car (last old))))))
-               (y2 (y (cadr (items (car (last old))))))
-               (angle (cond
-                       ((= x1 x2) (if (< y1 y2)
-                                      (/ pi 2)
-                                    (- (/ pi 2))))
-                       (t (if (< x1 x2)
-                              0
-                            pi)))))
-          (setf item-list (list (car item-list) (cadr item-list) (cadddr item-list)))
-          (move (rotate (do-set-items s item-list) angle (make-instance 'point)) x1 y1))
-      (do-set-items s item-list))))
-
-(defmethod make-item-list ((s semaphore))
-  (list (set-radius (move (make-instance 'light) 
-                          (slot-value s 'radius) (slot-value s 'radius))
-                    (slot-value s 'radius))
-        (set-radius (move (make-instance 'light)
-                          (slot-value s 'radius) (* 3 (slot-value s 'radius)))
-                    (slot-value s 'radius))
-        (when (eql (semaphore-type s) :vehicle) 
-          (set-radius (move (make-instance 'light) 
-                            (slot-value s 'radius) (* (slot-value s 'radius) 5))
-                      (slot-value s 'radius)))
-        (set-filledp 
-         (set-items (make-instance 'polygon) 
-                    (list
-                     (make-instance 'point) 
-                     (move (make-instance 'point) 
-                           (* 2 (slot-value s 'radius))
-                           0)
-                     (move (make-instance 'point) 
-                           (* 2 (slot-value s 'radius))
-                           (* 2 (slot-value s 'radius) (lights-count s)))
-                     (move (make-instance 'point) 
-                           0
-                           (* 2 (slot-value s 'radius) (lights-count s)))))
-         T)))
-
-(defmethod item-list-lights ((s semaphore) item-list)
-  (set-on-color (car item-list) :red)
-  (if (eql (semaphore-type s) :vehicle) 
-      (progn
-        (turn-off (set-on-color (cadr item-list) :orange))
-        (turn-off (set-on-color (caddr item-list) :green)))
-    (progn
-      (turn-off (set-on-color (cadr item-list) :green)))))
-     
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
 ;;; Třída crossroads
@@ -230,7 +171,7 @@ next-phase          Přepne křižovatku do další fáze a nastaví všem svým
   (unless (< value (phase-count c))
     (error "Crossroads phase is out of bounds"))
   (setf (slot-value c 'crossroads-phase) value)
-  (set-semaphores c)
+  (set-semaphores-phase c)
   c)
 
 (defmethod program ((c crossroads))
@@ -261,7 +202,7 @@ next-phase          Přepne křižovatku do další fáze a nastaví všem svým
   (when window (redraw window))
   c)
 
-(defmethod set-semaphores ((c crossroads))
+(defmethod set-semaphores-phase ((c crossroads))
   (let ((semaphores (semaphores c)))
     (dolist (item (nth (crossroads-phase c) (program c)))
       (set-semaphore-phase (car semaphores) item)
