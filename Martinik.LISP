@@ -13,9 +13,12 @@ DOKUMENTACE
 
 Před načtením souboru načtěte knihovnu micro-hraphics, a soubory 04_light.lisp, 05.lisp
 
+V globální proměnné *semaphores* je uložený seznam seznamů, který reprezentuje typy semaforů. 
+Lze tak jednoduše přidat nový semafor přidáním: (:název (barvy) (fáze)), kde i-tý prvek seznamu zastupuje i-té světlo od vrchu.
+
 NOVÉ VLASTNOSTI
 
-semaphore-type:   Typ semaforu, lze přepínat za běhu. Jsou definovány 2 stavy: :vehicle, :pedestrian.
+semaphore-type:   Typ semaforu, lze přepínat za běhu, ale restartuje pozici do levého horního rohu.
 semaphore-phase:  Reprezentuje aktuální fázi semaforu.
 phase-count:      Počet fází semaforu. Pouze ke čtení.
 radius:           Poloměr světla v semaforu, ovlivňuje celkovou velikost semaforu.
@@ -46,11 +49,7 @@ next-phase        Přepne semafor do další fáze. Pokud je zpráva poslána s 
 ;;;
 
 (defmethod definition ((s semaphore))
-  (let ((def '()))
-    (dolist (item *semaphores*)
-      (when (eql (car item) (semaphore-type s))
-        (setf def item)))
-    def))
+  (find (semaphore-type s) *semaphores* :key #'car))
 
 (defmethod lights ((s semaphore))
   (length (colors s)))
@@ -76,8 +75,9 @@ next-phase        Přepne semafor do další fáze. Pokud je zpráva poslána s 
 (defmethod semaphore-type ((s semaphore))
   (slot-value s 'semaphore-type))
 
-;restartuje pozici semaforu do levého horního rohu
 (defmethod set-semaphore-type ((s semaphore) value)
+  (unless (find value *semaphores* :key #'car)
+     (error "Unknown semaphore type"))
   (setf (slot-value s 'semaphore-type) value)
   (make-items s)
   s)
@@ -92,42 +92,49 @@ next-phase        Přepne semafor do další fáze. Pokud je zpráva poslána s 
   (set-phase s)
   s)
 
-
 ;;;
 ;;; Zprávy
 ;;;
 
-(defmethod next-phase ((s semaphore) &optional window)
+(defmethod next-phase ((s semaphore))
   (if (= (- (phase-count s) (semaphore-phase s)) 1)
       (set-semaphore-phase s 0)
     (set-semaphore-phase s (1+ (semaphore-phase s))))
-  (when window (redraw window))
   s)
 
 (defmethod set-phase ((s semaphore))
   (let ((items (items s))
         (phase (nth (semaphore-phase s) (phases s))))
     (dotimes (i (lights s))
+      (unless (typep (nth i items) 'light)
+        (error "Inconsistent semaphore items in set-phase"))
       (if (= (nth i phase) 1)
           (turn-on (nth i items))
         (turn-off (nth i items))))
     s))
 
 (defmethod make-items ((s semaphore))
-  (let ((lights '()))
-    (dotimes (i (lights s))
-      (setf lights (cons (turn-off (set-radius (set-on-color (move (make-instance 'light) (radius s) (* (+ (* 2 i) 1) (radius s))) (nth i (colors s))) (- (radius s) 1))) lights)))
-    (setf lights (reverse lights))
-    (setf (cdr (last lights))
-                     (list (set-filledp  (set-items 
-                         (make-instance 'polygon)
-                         (list 
-                          (move (make-instance 'point) 0 0)
-                          (move (make-instance 'point) (* 2 (radius s)) 0)
-                          (move (make-instance 'point) (* 2 (radius s)) (* 2 (radius s) (lights s)))
-                          (move (make-instance 'point) 0 (* 2 (radius s) (lights s))))
-                        )T )))
-    (do-set-items s lights)
+  (let ((items '()))
+    (dotimes (i (items s))
+      (setf items (cons (turn-off 
+                          (set-radius 
+                           (set-on-color 
+                            (move (make-instance 'light) (radius s) (* (+ (* 2 i) 1) (radius s)))
+                            (nth i (colors s)))
+                           (- (radius s) 1))) 
+                        items)))
+    (setf items (reverse items))
+    (setf (cdr (last items))
+                     (list (set-filledp  
+                            (set-items 
+                             (make-instance 'polygon)
+                             (list 
+                              (move (make-instance 'point) 0 0)
+                              (move (make-instance 'point) (* 2 (radius s)) 0)
+                              (move (make-instance 'point) (* 2 (radius s)) (* 2 (radius s) (lights s)))
+                              (move (make-instance 'point) 0 (* 2 (radius s) (lights s)))))
+                            T)))
+    (do-set-items s items)
     (set-phase s)
     s))
 
@@ -195,11 +202,10 @@ next-phase          Přepne křižovatku do další fáze a nastaví všem svým
 ;;; Zprávy
 ;;;
 
-(defmethod next-phase ((c crossroads) &optional window)
+(defmethod next-phase ((c crossroads))
   (if (= (- (phase-count c) (crossroads-phase c)) 1)
       (set-crossroads-phase c 0)
     (set-crossroads-phase c (1+ (crossroads-phase c))))
-  (when window (redraw window))
   c)
 
 (defmethod set-semaphores-phase ((c crossroads))
@@ -267,7 +273,8 @@ next-phase          Přepne křižovatku do další fáze a nastaví všem svým
 
 (defun start-junction (junction window)
   (loop
-   (next-phase junction window)
+   (next-phase junction)
+   (redraw window)
    (sleep 3)))
     
 #|
