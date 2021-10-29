@@ -33,7 +33,8 @@ next-phase        Přepne semafor do další fáze. Pokud je zpráva poslána s 
 (defvar *semaphores*)
 (setf *semaphores*
       '((:vehicle (:red :orange :green) ((1 0 0) (1 1 0) (0 0 1) (0 1 0)))
-      (:pedestrian (:red :green) ((1 0) (0 1)))))
+      (:pedestrian (:red :green) ((1 0) (0 1)))
+      (:monster (:red :orange :green :blue :purple) ((1 1 0 0 0)(1 0 1 0 1)(0 0 1 1 1)))))
 
 (defclass semaphore (abstract-picture)
   ((semaphore-type :initform :vehicle)
@@ -114,27 +115,22 @@ next-phase        Přepne semafor do další fáze. Pokud je zpráva poslána s 
     s))
 
 (defmethod make-items ((s semaphore))
-  (let ((items '()))
-    (dotimes (i (items s))
-      (setf items (cons (turn-off 
-                          (set-radius 
-                           (set-on-color 
-                            (move (make-instance 'light) (radius s) (* (+ (* 2 i) 1) (radius s)))
-                            (nth i (colors s)))
-                           (- (radius s) 1))) 
-                        items)))
-    (setf items (reverse items))
-    (setf (cdr (last items))
-                     (list (set-filledp  
-                            (set-items 
-                             (make-instance 'polygon)
-                             (list 
-                              (move (make-instance 'point) 0 0)
-                              (move (make-instance 'point) (* 2 (radius s)) 0)
-                              (move (make-instance 'point) (* 2 (radius s)) (* 2 (radius s) (lights s)))
-                              (move (make-instance 'point) 0 (* 2 (radius s) (lights s)))))
-                            T)))
-    (do-set-items s items)
+   (let ((lights '()))
+    (dotimes (i (lights s))
+      (setf lights (cons 
+                    (turn-off (set-radius (set-on-color (move (make-instance 'light) (radius s) (* (+ (* 2 i) 1) (radius s))) (nth i (colors s))) (- (radius s) 1))) 
+                    lights)))
+    (setf lights (reverse lights))
+    (setf (cdr (last lights))
+                     (list (set-filledp  (set-items 
+                                          (make-instance 'polygon)
+                                          (list 
+                                           (move (make-instance 'point) 0 0)
+                                           (move (make-instance 'point) (* 2 (radius s)) 0)
+                                           (move (make-instance 'point) (* 2 (radius s)) (* 2 (radius s) (lights s)))
+                                           (move (make-instance 'point) 0 (* 2 (radius s) (lights s)))))
+                                         T)))
+    (do-set-items s lights)
     (set-phase s)
     s))
 
@@ -215,6 +211,9 @@ next-phase          Přepne křižovatku do další fáze a nastaví všem svým
       (setf semaphores (cdr semaphores)))
     c))
       
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
 ;;; Testování
