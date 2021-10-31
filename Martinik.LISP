@@ -182,14 +182,15 @@ next-phase          Přepne křižovatku do další fáze a nastaví všem svým
 
 (defmethod set-program ((c crossroads) program)
   (setf (slot-value c 'program) program)
+  (set-semaphores-phase c)
   c)
 
-(defmethod semaphores ((c crossroads))
-  (let ((list '()))
-    (dolist (item (items c))
-      (when (typep item 'semaphore)
-        (setf list (cons item list))))
-    (reverse list)))
+(defmethod semaphores ((c crossroads) &optional (shape c))
+  (let ((sems (list :delete)))
+    (dolist (item (items shape))
+      (cond ((typep item 'semaphore) (nconc sems (list item)))
+            ((typep item 'abstract-picture) (nconc sems (semaphores c item)))))
+    (cdr sems)))
 
 (defmethod phase-count ((c crossroads))
   (length (program c)))
@@ -211,9 +212,6 @@ next-phase          Přepne křižovatku do další fáze a nastaví všem svým
       (setf semaphores (cdr semaphores)))
     c))
       
-
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
 ;;; Testování
@@ -263,7 +261,7 @@ next-phase          Přepne křižovatku do další fáze a nastaví všem svým
                                                                                                                   (move (make-instance 'point) 125 0)
                                                                                                                   (move (make-instance 'point) 125 80))) :gray) T))))
           (cros (set-program (set-items (make-instance 'crossroads) 
-                                        (list s1 s2 s3 s4 sp1 sp2 sp3 sp4 road)) 
+                                        (list s1 (set-items (make-instance 'picture) (list (set-items (make-instance 'crossroads) (list s2)))) s3 (set-items (make-instance 'picture) (list (set-items (make-instance 'crossroads) (list (set-items (make-instance 'picture) (list s4)))))) (set-items (make-instance 'crossroads) (list sp1 (set-items (make-instance 'picture) (list sp2)) sp3 (set-items (make-instance 'crossroads) (list sp4)))) road)) 
                              '((0 0 0 0 1 1 1 1) (0 1 0 1 0 0 0 0) 
                                (0 2 0 2 0 0 0 0) (0 3 0 3 0 0 0 0) 
                                (0 0 0 0 1 1 1 1) (1 0 1 0 0 0 0 0) 
@@ -272,11 +270,12 @@ next-phase          Přepne křižovatku do další fáze a nastaví všem svým
 
 (defun start-junction (junction window)
   (loop
-   (next-phase junction)
    (redraw window)
+   (next-phase junction)
    (sleep 3)))
     
 #|
+(semaphores (junction))
 (setf w (set-shape (make-instance 'window) (junction)))
 (start-junction (shape w) w)
 |#
