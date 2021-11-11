@@ -34,7 +34,7 @@ next-phase        Přepne semafor do další fáze. Pokud je zpráva poslána s 
 (setf *semaphores*
       '((:vehicle (:red :orange :green) ((1 0 0) (1 1 0) (0 0 1) (0 1 0)))
       (:pedestrian (:red :green) ((1 0) (0 1)))
-      (:monster (:red :orange :green :blue :purple) ((1 1 0 0 0)(1 0 1 0 1)(0 0 1 1 1)))))
+      (:monster (:red :orange :green :blue :purple) ((1 1 0 0 0) (1 0 1 0 1) (0 0 1 1 1)))))
 
 (defclass semaphore (abstract-picture)
   ((semaphore-type :initform :vehicle)
@@ -156,12 +156,9 @@ next-phase          Přepne křižovatku do další fáze a nastaví všem svým
 
 |#
 
-(defclass crossroads (abstract-picture)
+(defclass crossroads (picture)
   ((crossroads-phase :initform 0)
    (program :initform '())))
-
-(defmethod check-items ((c crossroads) item-list)
-  (do-check-items c item-list))
 
 ;;;
 ;;; Vlastnosti
